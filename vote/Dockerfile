@@ -9,6 +9,7 @@ RUN apt-get update && \
 # Set the application directory
 WORKDIR /usr/local/app
 
+
 # Install our requirements.txt
 COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
