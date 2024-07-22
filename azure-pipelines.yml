@@ -39,68 +39,11 @@ stages:
     steps:
     - task: Docker@2
       displayName: Push an image
-    inputs:
-      containerRegistry: 'sumedh03'
-      repository: 'sumedh1991'
-      command: 'buildAndPush'
-      Dockerfile: '**/Dockerfile'
-      tags: '$(tag)
-
-steps:
-- bash: |
-   # Write your commands here
-   
-   # Get the build tag based on the date
-   buildtag=$(date +'%m-%d-%Y')
-   echo "Build Tag: $buildtag"
-   
-   version=$(git rev-parse --short=8 HEAD)
-   echo "Version ID: $version"
-   
-   # Add the '-' prefix to the version number
-   version_with_prefix="-$version"
-   echo "Version with Prefix: $version_with_prefix"
-   
-   # Append the version ID to the build tag
-   buildtagwithversion="$buildtag$version_with_prefix"
-   echo "Build Tag with Version: $buildtagwithversion"
-   
-   # Set the build tag with version as a variable
-   echo "##vso[task.setvariable variable=build-tag-with-version;]$buildtagwithversion"
-   
-   
-  displayName: 'Bash Script'
-
-- stage: Test
-  displayName: trivy test
-  dependsOn:
-  - Build
-  condition: succeeded()
-  jobs:
-  - job: test_with_trivy
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: Docker@2
       inputs:
-        containerRegistry: 'cai-yaml-test'
-        command: 'login'
-    - task: Bash@3
-      inputs:
-        targetType: 'inline'
-        script: |
-          #Downloading and installing trivy
+        containerRegistry: |
+          $(dockerHub)
+        repository: 'sumedh03/sumedh1991'
+        command: 'buildAndPush'
+        Dockerfile: '**/Dockerfile'
+        
 
-          wget https://github.com/aquasecurity/trivy/releases/download/v0.18.3/trivy_0.18.3_Linux-64bit.deb
-          sudo dpkg -i trivy_0.18.3_Linux-64bit.deb
-
-          git clone https://github.com/aquasecurity/trivy.git
-
-          cd trivy
-
-          trivy image --severity HIGH,CRITICAL --format template --template "contrib/junit.tpl" -o high-critical-report.xml "conversationalai.azurecr.io/test:$(Build.BuildId)"
-    - task: PublishTestResults@2
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/high-critical-report.xml'
-        testRunTitle: 'test results'
