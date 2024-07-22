@@ -40,18 +40,18 @@ stages:
     - task: Docker@2
       displayName: Push an image
     inputs:
-        containerRegistry: 'sumedh03'
-        repository: 'sumedh1991'
-        command: 'buildAndPush'
-        Dockerfile: '**/Dockerfile'
-        tags: '$(tag)
+      containerRegistry: 'sumedh03'
+      repository: 'sumedh1991'
+      command: 'buildAndPush'
+      Dockerfile: '**/Dockerfile'
+      tags: '$(tag)
 
 steps:
 - bash: |
    # Write your commands here
    
    # Get the build tag based on the date
-   buildtag=$(date +'%Y.%m.%d')
+   buildtag=$(date +'%m-%d-%Y')
    echo "Build Tag: $buildtag"
    
    version=$(git rev-parse --short=8 HEAD)
