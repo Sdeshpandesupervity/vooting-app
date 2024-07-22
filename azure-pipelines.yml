@@ -17,7 +17,7 @@ stages:
       inputs:
         containerRegistry: 'docker registry'
         repository: 'sumedh1991'
-        command: 'buildAndPush'
+        command: 'build'
         Dockerfile: '**/Dockerfile'
 - stage: Test
   displayName: trivy test
