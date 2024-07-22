@@ -1,82 +1,45 @@
 trigger:
-  branches:
-    include:
-    - main
+- main
+
 pool:
-  vmImage: ubuntu-latest
-stages:
-- stage: Build
-  displayName: Image Build
-  jobs:
-  - job: Build
-    displayName: Build and Push the image to ACR
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: Docker@2
-      inputs:
-        containerRegistry: 'docker registry'
-        repository: 'sumedh1991'
-        command: 'build'
-        Dockerfile: '**/Dockerfile'
-- stage: Test
-  displayName: trivy test
-  dependsOn:
-  - Build
-  condition: succeeded()
-  jobs:
-  - job: test_with_trivy
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: Docker@2
-      inputs:
-        containerRegistry: 'sumedh03'
-        command: 'login'
-    - task: Bash@3
-      inputs:
-        targetType: 'inline'
-        script: |
-          #Downloading and installing trivy
+  vmImage: 'ubuntu-latest'
 
-          wget https://github.com/aquasecurity/trivy/releases/download/v0.18.3/trivy_0.18.3_Linux-64bit.deb
-          sudo dpkg -i trivy_0.18.3_Linux-64bit.deb
+variables:
+  # Define variables to store the commit ID and tag
+  commitId: ''
+  tag: ''
 
-          git clone https://github.com/aquasecurity/trivy.git
+steps:
+- script: |
+    # Fetch the latest tags
+    git fetch --tags
+    
+    # Get the commit ID
+    commitId=$(git rev-parse HEAD)
+    echo "Commit ID: $commitId"
+    
+    # Get the date of the commit
+    commitDate=$(git show -s --format=%ci $commitId)
+    echo "Commit Date: $commitDate"
+    
+    # Get the latest tag associated with the commit
+    tag=$(git describe --tags $commitId)
+    echo "Tag: $tag"
+    
+    # Set the variables for further use in the pipeline
+    echo "##vso[task.setvariable variable=commitId]$commitId"
+    echo "##vso[task.setvariable variable=commitDate]$commitDate"
+    echo "##vso[task.setvariable variable=tag]$tag"
+  displayName: 'Get Commit Date and Tag'
 
-          cd trivy
+# You can add more steps here to use the variables
 
-          trivy image --severity HIGH,CRITICAL --format template --template "contrib/junit.tpl" -o high-critical-report.xml "conversationalai.azurecr.io/test:$(Build.BuildId)"
-    - task: PublishTestResults@2
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/high-critical-report.xml'
-        testRunTitle: 'test results'
-- stage: Deploy
-  displayName: Deploy Image to K8's
-  dependsOn:
-  - Test
-  condition: succeeded()
-  jobs:
-  - deployment: Deploy
-    displayName: Deploy Job
-    pool:
-      vmImage: 'ubuntu-latest'
-    environment:
-      name: 'Production'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: Kubernetes@1
-            inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: 'ext-dev-cluster'
-              namespace: 'superqa'
-              command: 'set'
-              arguments: 'image deployment svai-img-processor-test svai-img-processor-test=conversationalai.azurecr.io/test:$(Build.BuildId)'
-              secretType: 'dockerRegistry'
-              containerRegistryType: 'Azure Container Registry'
+- script: |
+    echo "Commit ID: $(commitId)"
+    echo "Commit Date: $(commitDate)"
+    echo "Tag: $(tag)"
+  displayName: 'Display Commit Information'
+
 
 
         
