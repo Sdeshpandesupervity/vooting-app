@@ -15,8 +15,8 @@ stages:
     steps:
     - task: Docker@2
       inputs:
-        containerRegistry: 'cai-yaml-test'
-        repository: 'test'
+        containerRegistry: 'docker registry'
+        repository: 'sumedh1991'
         command: 'buildAndPush'
         Dockerfile: '**/Dockerfile'
 - stage: Test
