@@ -1,7 +1,7 @@
 trigger:
   branches:
     include:
-    - development
+    - main
 pool:
   vmImage: ubuntu-latest
 stages:
@@ -40,31 +40,7 @@ stages:
         image: 'conversationalai.azurecr.io/test:$(Build.BuildId)'
         severities: 'CRITICAL,HIGH'
         exitCode: '0'
-- stage: Deploy
-  displayName: Deploy Image to K8's
-  dependsOn:
-  - Test
-  condition: succeeded()
-  jobs:
-  - deployment: Deploy
-    displayName: Deploy Job
-    pool:
-      vmImage: 'ubuntu-latest'
-    environment:
-      name: 'Production'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: Kubernetes@1
-            inputs:
-              connectionType: 'Kubernetes Service Connection'
-              kubernetesServiceEndpoint: 'ext-dev-cluster'
-              namespace: 'superqa'
-              command: 'set'
-              arguments: 'image deployment svai-img-processor-test svai-img-processor-test=conversationalai.azurecr.io/test:$(Build.BuildId)'
-              secretType: 'dockerRegistry'
-              containerRegistryType: 'Azure Container Registry'
+
 
 
 
