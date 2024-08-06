@@ -48,10 +48,16 @@ stages:
 
 # Dotnet build task
     - task: DotNetCoreCLI@2
+      inputs:
+        command: 'build'
+        projects: 'Techforceai/Infra-Test'
+        arguments: 'any'
       displayName: 'dotnet build'
 
 # Run Code Analysis task
     - task: SonarQubeAnalyze@6
+      inputs:
+        jdkversion: 'JAVA_HOME_17_X64'
 
 # Publish Quality Gate Result task
     - task: SonarQubePublish@6
