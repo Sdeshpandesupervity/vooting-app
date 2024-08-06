@@ -10,12 +10,17 @@ steps:
   fetchDepth: 0
 
 # Prepare Analysis Configuration task
-- task: SonarQubePrepare@6
+- task: Maven@4
   inputs:
-    scannerMode: 'MSBuild'
-    msBuildVersion: '16.0'
-    projectKey: 'test'
-    projectName: 'Infra-Test'
+    mavenPomFile: 'pom.xml'
+    publishJUnitResults: true
+    testResultsFiles: '**/surefire-reports/TEST-*.xml'
+    testRunTitle: 'test'
+    javaHomeOption: 'JDKVersion'
+    mavenVersionOption: 'Default'
+    mavenAuthenticateFeed: false
+    effectivePomSkip: false
+    sonarQubeRunAnalysis: false
 
 # Dotnet build task
 - task: DotNetCoreCLI@2
