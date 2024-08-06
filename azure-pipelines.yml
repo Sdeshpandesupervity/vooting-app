@@ -1,70 +1,30 @@
 trigger:
-- main
+- main # or the name of your main branch
 
-pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  NVD_API_KEY: e6a17ec1-4fa4-4f70-b3c7-9f38690bf396
-  IMAGE_NAME: 'superautomation' # Replace with your Docker image name
-  TRIVY_REPORT: 'trivy-report.json'
-  DEPENDENCY_CHECK_REPORT: 'dependency-check-report'
 
 steps:
-# Install prerequisites
-- task: UseDotNet@2
+ # Checkout the repository 
+- checkout: self
+
+ # Disable shallow fetch
+  fetchDepth: 0
+
+# Prepare Analysis Configuration task
+- task: SonarQubePrepare@6
   inputs:
-    packageType: 'sdk'
-    version: '5.x' # Replace with your .NET version if needed
+    scannerMode: 'MSBuild'
+    msBuildVersion: '5.0'
+    projectKey: 'test'
+    projectName: 'Infra-Test'
 
-# OWASP Dependency-Check
-- task: Bash@3
-  displayName: 'Run OWASP Dependency-Check'
+# Dotnet build task
+- task: DotNetCoreCLI@2
+  displayName: 'dotnet build'
+
+# Run Code Analysis task
+- task: SonarQubeAnalyze@6
+
+# Publish Quality Gate Result task
+- task: SonarQubePublish@6
   inputs:
-    targetType: 'inline'
-    script: |
-      # Install OWASP Dependency-Check
-      curl -L -O https://github.com/jeremylong/DependencyCheck/releases/download/v6.5.3/dependency-check-6.5.3-release.zip
-      unzip dependency-check-6.5.3-release.zip -d dependency-check
-
-      # Run Dependency-Check
-      ./dependency-check/bin/dependency-check.sh \
-        --project "MyProject" \
-        --scan . \
-        --out $(DEPENDENCY_CHECK_REPORT) \
-        --format "HTML,XML,JSON" \
-        --nvd-api-key $(NVD_API_KEY)
-
-
-
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Dependency-Check Report'
-  inputs:
-    PathtoPublish: $(DEPENDENCY_CHECK_REPORT)
-    ArtifactName: 'dependency-check-report'
-
-# Trivy Scan
-- task: Bash@3
-  displayName: 'Run Trivy Scan'
-  inputs:
-    targetType: 'inline'
-    script: |
-      # Install Trivy
-      curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b ~/bin
-      
-      # Login to Docker (if needed)
-      echo $(DOCKER_PASSWORD) | docker login -u $(DOCKER_USERNAME) --password-stdin
-
-      # Pull Docker image (if not already available)
-      docker pull $(IMAGE_NAME)
-
-      # Run Trivy scan
-      ~/bin/trivy image --format json --output $(TRIVY_REPORT) $(IMAGE_NAME)
-
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish Trivy Report'
-  inputs:
-    PathtoPublish: $(TRIVY_REPORT)
-    ArtifactName: 'trivy-report'
-
-    
+    pollingTimeoutSec: '300'
