@@ -13,7 +13,7 @@ steps:
 - task: SonarQubePrepare@6
   inputs:
     scannerMode: 'MSBuild'
-    msBuildVersion: '5.0'
+    msBuildVersion: '16.0'
     projectKey: 'test'
     projectName: 'Infra-Test'
 
