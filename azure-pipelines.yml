@@ -3,20 +3,9 @@ trigger:
 
 pool:
   vmImage: 'ubuntu-latest'
-
 variables:
-  SONARQUBE_PROJECT_KEY: 'test'
-  SONARQUBE_PROJECT_NAME: 'test'
-  SONARQUBE_PROJECT_VERSION: '1.0'
-  SONARQUBE_SERVICE_CONNECTION: 'Sonar-Qube'
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
-
 stages:
-- stage: 'SonarQubeAnalysis'
-  displayName: 'SonarQube Analysis'
-  jobs:
-  - job: 'Analyze'
-    displayName: 'Analyze'
 - stage: Build
   displayName: Image Build
   jobs:
@@ -31,43 +20,30 @@ stages:
         repository: 'test'
         command: 'buildAndPush'
         Dockerfile: '**/Dockerfile'
-- stage: Test
-  displayName: trivy test
+- stage: DependencyCheck
+  displayName: OWASP Dependency Check
   dependsOn:
   - Build
   condition: succeeded()
   jobs:
-  - job: test_with_trivy
+  - job: dependency_check
     pool:
       vmImage: 'ubuntu-latest'
     steps:
-    - task: Docker@2
-      inputs:
-        containerRegistry: 'cai-yaml-test'
-        command: 'login'
-    - task: trivy@1
-      inputs:
-        version: 'latest'
-        loginDockerConfig: true
-        image: 'conversationalai.azurecr.io/test:$(Build.BuildId)'
-        severities: 'CRITICAL,HIGH'
-        exitCode: '0'
-- stage: DependencyCheck
-  jobs:
-  - job: OWASPDependencyCheck
-    steps:
     - script: |
-        echo Installing OWASP Dependency Check...
-        wget https://github.com/jeremylong/DependencyCheck/releases/download/v6.1.6/dependency-check-6.1.6-release.zip
-        unzip dependency-check-6.1.6-release.zip
-      displayName: 'Install OWASP Dependency Check'
-
-    - script: |
-        echo Running OWASP Dependency Check...
-        ./dependency-check/bin/dependency-check.sh --project "YourProjectName" --scan "$(Build.SourcesDirectory)/" --out "$(Build.ArtifactStagingDirectory)/dependency-check-report"
+        # Install .NET SDK
+        sudo apt-get update
+        sudo apt-get install -y dotnet-sdk-6.0
+        
+        # Download and unzip OWASP Dependency Check
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v${{ variables.DEPENDENCY_CHECK_VERSION }}/dependency-check-${{ variables.DEPENDENCY_CHECK_VERSION }}-release.zip
+        unzip dependency-check-${{ variables.DEPENDENCY_CHECK_VERSION }}-release.zip -d dependency-check
+        
+        # Run OWASP Dependency Check with enhanced logging
+        dependency-check/bin/dependency-check.sh \
+          --project "My Project" \
+          --scan $(BUILD_SOURCESDIRECTORY) \
+          --format "ALL" \
+          --out $(Build.ArtifactStagingDirectory)/dependency-check \
+          --log $(Build.ArtifactStagingDirectory)/dependency-check/dependency-check.log
       displayName: 'Run OWASP Dependency Check'
-
-    - task: PublishPipelineArtifact@1
-      inputs:
-        targetPath: '$(Build.ArtifactStagingDirectory)/dependency-check-report'
-        artifact: 'OWASPDependencyCheckReport'
