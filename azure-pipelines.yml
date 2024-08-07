@@ -31,16 +31,6 @@ stages:
         repository: 'test'
         command: 'buildAndPush'
         Dockerfile: '**/Dockerfile'
-    - task: SonarQubePrepare@6
-      inputs:
-        SonarQube: 'Sonar_Qube'
-        scannerMode: 'MSBuild'
-        msBuildVersion: '7.1.1'
-        projectKey: 'test'
-        projectName: 'Infra-Test'
-    - task: SonarQubePublish@6
-      inputs:
-        pollingTimeoutSec: '30'
 - stage: Test
   displayName: trivy test
   dependsOn:
