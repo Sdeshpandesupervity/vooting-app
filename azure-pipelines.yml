@@ -8,8 +8,9 @@ variables:
   SONARQUBE_PROJECT_KEY: 'test'
   SONARQUBE_PROJECT_NAME: 'test'
   SONARQUBE_PROJECT_VERSION: '1.0'
-  SONARQUBE_SERVICE_CONNECTION: 'Sonar-Qube'
+  SONARQUBE_SERVICE_CONNECTION: 'SonarQube'
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
+  DEPENDENCY_CHECK_VERSION: '6.3.2' # Update to the desired version
 
 stages:
 - stage: 'SonarQubeAnalysis'
@@ -31,8 +32,25 @@ stages:
         repository: 'test'
         command: 'buildAndPush'
         Dockerfile: '**/Dockerfile'
+
+- stage: DependencyCheck
+  displayName: OWASP Dependency Check
+  dependsOn:
+  - Build
+  condition: succeeded()
+  jobs:
+  - job: dependency_check
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+    - script: |
+        wget https://github.com/jeremydmiller/aspnetboilerplate/releases/download/dependency-check-${{ variables.DEPENDENCY_CHECK_VERSION }}/dependency-check-${{ variables.DEPENDENCY_CHECK_VERSION }}-release.zip
+        unzip dependency-check-${{ variables.DEPENDENCY_CHECK_VERSION }}-release.zip
+        dependency-check/bin/dependency-check.sh --project "My Project" --scan $(BUILD_SOURCESDIRECTORY) --format "ALL" --out $(Build.ArtifactStagingDirectory)/dependency-check
+      displayName: 'Run OWASP Dependency Check'
+
 - stage: Test
-  displayName: trivy test
+  displayName: Trivy Test
   dependsOn:
   - Build
   condition: succeeded()
@@ -51,24 +69,5 @@ stages:
         loginDockerConfig: true
         image: 'conversationalai.azurecr.io/test:$(Build.BuildId)'
         severities: 'CRITICAL,HIGH'
-        exitCode: '0'
-- stage: DependencyCheck
-  jobs:
-  - job: OWASPDependencyCheck
-    steps:
-    - script: |
-        echo Installing OWASP Dependency Check...
-        wget https://github.com/jeremylong/DependencyCheck/releases/download/v6.1.6/dependency-check-6.1.6-release.zip
-        unzip dependency-check-6.1.6-release.zip
-      displayName: 'Install OWASP Dependency Check'
+        exitCode: '1' # Adjust based on desired behavior
 
-    - script: |
-        echo Running OWASP Dependency Check...
-        ./dependency-check/bin/dependency-check.sh --project "YourProjectName" --scan "$(Build.SourcesDirectory)/" --out "$(Build.ArtifactStagingDirectory)/dependency-check-report"
-      displayName: 'Run OWASP Dependency Check'
-
-    - task: PublishPipelineArtifact@1
-      inputs:
-        targetPath: '$(Build.ArtifactStagingDirectory)/dependency-check-report'
-        artifact: 'OWASPDependencyCheckReport'
- 
