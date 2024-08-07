@@ -52,3 +52,22 @@ stages:
         image: 'conversationalai.azurecr.io/test:$(Build.BuildId)'
         severities: 'CRITICAL,HIGH'
         exitCode: '0'
+- stage: DependencyCheck
+  jobs:
+  - job: OWASPDependencyCheck
+    steps:
+    - script: |
+        echo Installing OWASP Dependency Check...
+        wget https://github.com/jeremylong/DependencyCheck/releases/download/v6.1.6/dependency-check-6.1.6-release.zip
+        unzip dependency-check-6.1.6-release.zip
+      displayName: 'Install OWASP Dependency Check'
+
+    - script: |
+        echo Running OWASP Dependency Check...
+        ./dependency-check/bin/dependency-check.sh --project "YourProjectName" --scan "$(Build.SourcesDirectory)/" --out "$(Build.ArtifactStagingDirectory)/dependency-check-report"
+      displayName: 'Run OWASP Dependency Check'
+
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)/dependency-check-report'
+        artifact: 'OWASPDependencyCheckReport'
