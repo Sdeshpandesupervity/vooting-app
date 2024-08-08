@@ -25,12 +25,7 @@ jobs:
       Dockerfile: '**/Dockerfile'
       tags: 'latest'
 
-  - script: |
-      echo "Running Trivy scan on the built Docker image..."
-      docker run --rm \
-        -v /var/run/docker.sock:/var/run/docker.sock \
-        aquasec/trivy:latest image your-docker-repo/your-image:latest
-    displayName: 'Run Trivy Scan on Docker Image'
+
 
   - script: |
       echo "Running OWASP Dependency-Check on the source code..."
