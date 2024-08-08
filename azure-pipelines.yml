@@ -19,12 +19,11 @@ jobs:
 
   - task: Docker@2
     inputs:
-      containerRegistry: '$(dockerRegistryServiceConnection)' # Docker registry service connection in Azure DevOps
+      containerRegistry: 'docker registry'
       repository: 'your-docker-repo/your-image'
       command: 'buildAndPush'
       Dockerfile: 'Dockerfile'
-      tags: |
-        latest
+      tags: 'latest'
 
   - script: |
       echo "Running Trivy scan on the built Docker image..."
