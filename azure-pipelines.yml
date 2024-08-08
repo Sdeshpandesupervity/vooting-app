@@ -20,7 +20,7 @@ jobs:
   - task: Docker@2
     inputs:
       containerRegistry: 'docker registry'
-      repository: 'your-docker-repo/your-image'
+      repository: 'sumedh03/sonarqube'
       command: 'buildAndPush'
       Dockerfile: 'Dockerfile'
       tags: 'latest'
