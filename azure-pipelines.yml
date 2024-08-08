@@ -6,8 +6,8 @@ pool:
 
 variables:
   SONARQUBE_HOST_URL: 'http://localhost:9000' # Adjust if you're using an external SonarQube server
-  SONARQUBE_PROJECT_KEY: 'your-project-key'
-  SONARQUBE_PROJECT_NAME: 'Your Project Name'
+  SONARQUBE_PROJECT_KEY: 'test'
+  SONARQUBE_PROJECT_NAME: 'test'
   SONARQUBE_LOGIN: $(SONARQUBE_TOKEN) # Set this as a secret variable in Azure DevOps
   POSTGRES_PASSWORD: 'sonar' # Update if you have a different password
   SONARQUBE_IMAGE: 'sonarqube:community'
