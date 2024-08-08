@@ -44,7 +44,6 @@ jobs:
       echo "Waiting for SonarQube to be ready..."
       until curl -s $(SONARQUBE_HOST_URL)/api/system/status | grep "status.*UP"; do
         echo "SonarQube is not ready yet. Waiting..."
-        sleep 30
       done
       echo "SonarQube is up and running."
     displayName: 'Wait for SonarQube Deployment'
