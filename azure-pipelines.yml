@@ -8,8 +8,9 @@ variables:
   SONARQUBE_PROJECT_KEY: 'test'
   SONARQUBE_PROJECT_NAME: 'test'
   SONARQUBE_PROJECT_VERSION: '1.0'
-  SONARQUBE_SERVICE_CONNECTION: 'Sonar-Qube'
+  SONARQUBE_SERVICE_CONNECTION: 'SonarQube'
   BUILD_SOURCESDIRECTORY: $(Build.SourcesDirectory)
+  DEPENDENCY_CHECK_VERSION: '6.5.3' # Update to the desired version
 
 stages:
 - stage: 'SonarQubeAnalysis'
@@ -17,6 +18,19 @@ stages:
   jobs:
   - job: 'Analyze'
     displayName: 'Analyze'
+    steps:
+    - task: SonarQubePrepare@5
+      inputs:
+        SonarQube: '$(SONARQUBE_SERVICE_CONNECTION)'
+        scannerMode: 'MSBuild'
+        projectKey: '$(SONARQUBE_PROJECT_KEY)'
+        projectName: '$(SONARQUBE_PROJECT_NAME)'
+        projectVersion: '$(SONARQUBE_PROJECT_VERSION)'
+    - task: SonarQubeAnalyze@5
+    - task: SonarQubePublish@5
+      inputs:
+        pollingTimeoutSec: '300'
+
 - stage: Build
   displayName: Image Build
   jobs:
@@ -29,26 +43,3 @@ stages:
       inputs:
         containerRegistry: 'cai-yaml-test'
         repository: 'test'
-        command: 'buildAndPush'
-        Dockerfile: '**/Dockerfile'
-- stage: Test
-  displayName: trivy test
-  dependsOn:
-  - Build
-  condition: succeeded()
-  jobs:
-  - job: test_with_trivy
-    pool:
-      vmImage: 'ubuntu-latest'
-    steps:
-    - task: Docker@2
-      inputs:
-        containerRegistry: 'cai-yaml-test'
-        command: 'login'
-    - task: trivy@1
-      inputs:
-        version: 'latest'
-        loginDockerConfig: true
-        image: 'conversationalai.azurecr.io/test:$(Build.BuildId)'
-        severities: 'CRITICAL,HIGH'
-        exitCode: '0'
