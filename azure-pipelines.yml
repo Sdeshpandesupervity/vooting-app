@@ -5,46 +5,50 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
+  DOCKER_IMAGE_NAME: 'sumedh03/sonarqube:latest'
+  DOCKER_IMAGE_TAG: 'latest'
+  SONARQUBE_HOST_URL: 'http://sonarqube:9000'
   SONARQUBE_PROJECT_KEY: 'test'
   SONARQUBE_PROJECT_NAME: 'test'
-  SONARQUBE_HOST_URL: 'http://localhost:9000'
   SONARQUBE_LOGIN: $(SONARQUBE_TOKEN) # Set this as a secret variable in Azure DevOps
+  DOCKER_REGISTRY_SERVICE_CONNECTION: 'docker registry' # Docker registry service connection
 
 jobs:
-- job: 'BuildAndAnalyze'
-  displayName: 'Build Docker Image and Run Security and Code Analysis'
+- job: 'BuildAndDeploy'
+  displayName: 'Build Docker Image, Deploy SonarQube, and Run Analysis'
 
   steps:
   - checkout: self
 
+  # Build and Push Docker Image (if needed)
   - task: Docker@2
     inputs:
-      containerRegistry: 'docker registry'
-      repository: 'sumedh03/sonarqube'
+      containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
+      repository: '$(DOCKER_IMAGE_NAME)'
       command: 'buildAndPush'
-      Dockerfile: '**/Dockerfile'
-      tags: 'latest'
+      Dockerfile: '**/Dockerfile' # Path to Dockerfile
+      tags: |
+        $(DOCKER_IMAGE_TAG)
+    displayName: 'Build and Push Docker Image'
+
+  # Deploy SonarQube and PostgreSQL
   - script: |
-      echo "Starting SonarQube..."
-      docker run -d --name sonarqube \
-        -e SONAR_JDBC_URL="jdbc:postgresql://sonarqube-postgres:5432/sonarqube" \
-        -e SONAR_JDBC_USERNAME=sonar \
-        -e SONAR_JDBC_PASSWORD=sonar \
-        -p 9000:9000 sonarqube:community
+      echo "Deploying SonarQube and PostgreSQL..."
+      docker run -d --name sonarqube-postgres -e POSTGRES_USER=sonar -e POSTGRES_PASSWORD=sonar -e POSTGRES_DB=sonarqube postgres:13
+      docker run -d --name sonarqube -p 9000:9000 --link sonarqube-postgres:postgres sonarqube:community
+    displayName: 'Deploy SonarQube and PostgreSQL Containers'
 
-      echo "Starting PostgreSQL..."
-      docker run -d --name sonarqube-postgres \
-        -e POSTGRES_USER=sonar \
-        -e POSTGRES_PASSWORD=sonar \
-        -e POSTGRES_DB=sonarqube postgres:13
-
+  # Wait for SonarQube to be Ready
+  - script: |
       echo "Waiting for SonarQube to be ready..."
-      until curl -s $(SONARQUBE_HOST_URL)/api/system/health | grep -q "GREEN"; do
-        sleep 10
-        echo "Waiting for SonarQube..."
+      until curl -s $(SONARQUBE_HOST_URL)/api/system/status | grep "status.*UP"; do
+        echo "SonarQube is not ready yet. Waiting..."
+        sleep 30
       done
-    displayName: 'Start SonarQube and PostgreSQL'
+      echo "SonarQube is up and running."
+    displayName: 'Wait for SonarQube Deployment'
 
+  # Run SonarQube Scanner
   - script: |
       echo "Running SonarQube Scanner..."
       docker run --rm \
@@ -57,13 +61,9 @@ jobs:
         -Dsonar.sources=/src
     displayName: 'Run SonarQube Analysis'
 
+  # Fetch SonarQube Logs
   - script: |
-      echo "Displaying SonarQube logs..."
-      docker logs sonarqube
+      echo "Fetching SonarQube logs..."
+      docker logs sonarqube > sonarqube-logs.txt
+      cat sonarqube-logs.txt
     displayName: 'Show SonarQube Logs'
-
-  - script: |
-      echo "Cleaning up Docker containers..."
-      docker stop sonarqube sonarqube-postgres
-      docker rm sonarqube sonarqube-postgres
-    displayName: 'Clean Up'
