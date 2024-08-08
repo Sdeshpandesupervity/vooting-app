@@ -5,38 +5,39 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  DOCKER_IMAGE_NAME: 'sumedh03/sonarqube:latest'
-  DOCKER_IMAGE_TAG: 'latest'
-  SONARQUBE_HOST_URL: 'http://sonarqube:9000'
-  SONARQUBE_PROJECT_KEY: 'test'
-  SONARQUBE_PROJECT_NAME: 'test'
+  SONARQUBE_HOST_URL: 'http://localhost:9000' # Adjust if you're using an external SonarQube server
+  SONARQUBE_PROJECT_KEY: 'your-project-key'
+  SONARQUBE_PROJECT_NAME: 'Your Project Name'
   SONARQUBE_LOGIN: $(SONARQUBE_TOKEN) # Set this as a secret variable in Azure DevOps
-  DOCKER_REGISTRY_SERVICE_CONNECTION: 'docker registry' # Docker registry service connection
-
+  POSTGRES_PASSWORD: 'sonar' # Update if you have a different password
+  SONARQUBE_IMAGE: 'sonarqube:community'
+  POSTGRES_IMAGE: 'postgres:13'
+  
 jobs:
-- job: 'BuildAndDeploy'
-  displayName: 'Build Docker Image, Deploy SonarQube, and Run Analysis'
+- job: 'DeployAndAnalyze'
+  displayName: 'Deploy SonarQube, Run Analysis, and Fetch Logs'
 
   steps:
   - checkout: self
 
-  # Build and Push Docker Image (if needed)
-  - task: Docker@2
-    inputs:
-      containerRegistry: '$(DOCKER_REGISTRY_SERVICE_CONNECTION)'
-      repository: '$(DOCKER_IMAGE_NAME)'
-      command: 'buildAndPush'
-      Dockerfile: '**/Dockerfile' # Path to Dockerfile
-      tags: |
-        $(DOCKER_IMAGE_TAG)
-    displayName: 'Build and Push Docker Image'
-
-  # Deploy SonarQube and PostgreSQL
+  # Deploy PostgreSQL and SonarQube
   - script: |
-      echo "Deploying SonarQube and PostgreSQL..."
-      docker run -d --name sonarqube-postgres -e POSTGRES_USER=sonar -e POSTGRES_PASSWORD=sonar -e POSTGRES_DB=sonarqube postgres:13
-      docker run -d --name sonarqube -p 9000:9000 --link sonarqube-postgres:postgres sonarqube:community
-    displayName: 'Deploy SonarQube and PostgreSQL Containers'
+      echo "Deploying PostgreSQL container..."
+      docker run -d --name sonarqube-postgres \
+        -e POSTGRES_USER=sonar \
+        -e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
+        -e POSTGRES_DB=sonarqube \
+        postgres:13
+
+      echo "Deploying SonarQube container..."
+      docker run -d --name sonarqube \
+        -p 9000:9000 \
+        --link sonarqube-postgres:postgres \
+        -e SONARQUBE_JDBC_URL=jdbc:postgresql://postgres:5432/sonarqube \
+        -e SONARQUBE_JDBC_USERNAME=sonar \
+        -e SONARQUBE_JDBC_PASSWORD=$(POSTGRES_PASSWORD) \
+        $(SONARQUBE_IMAGE)
+    displayName: 'Deploy PostgreSQL and SonarQube Containers'
 
   # Wait for SonarQube to be Ready
   - script: |
