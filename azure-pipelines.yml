@@ -22,7 +22,7 @@ jobs:
       containerRegistry: 'docker registry'
       repository: 'sumedh03/sonarqube'
       command: 'buildAndPush'
-      Dockerfile: 'docker/Dockerfile'
+      Dockerfile: '**/Dockerfile'
       tags: 'latest'
 
   - script: |
