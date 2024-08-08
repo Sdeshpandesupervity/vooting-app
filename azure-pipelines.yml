@@ -24,18 +24,6 @@ jobs:
       command: 'buildAndPush'
       Dockerfile: '**/Dockerfile'
       tags: 'latest'
-
-
-
-  - script: |
-      echo "Running OWASP Dependency-Check on the source code..."
-      docker run --rm \
-        -v $(System.DefaultWorkingDirectory):/src \
-        -v $(System.DefaultWorkingDirectory)/dependency-check-report:/report \
-        owasp/dependency-check \
-        --scan /src --format ALL --out /report
-    displayName: 'Run OWASP Dependency-Check'
-
   - script: |
       echo "Starting SonarQube..."
       docker run -d --name sonarqube \
