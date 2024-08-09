@@ -5,50 +5,85 @@ pool:
   vmImage: 'ubuntu-latest'
 
 variables:
-  SONARQUBE_HOST_URL: 'http://localhost:9000' # Adjust if you're using an external SonarQube server
-  SONARQUBE_PROJECT_KEY: 'test'
-  SONARQUBE_PROJECT_NAME: 'test'
+  # SonarQube settings
+  SONARQUBE_HOST_URL: 'http://sonarqube.default.svc.cluster.local:9000'
+  SONARQUBE_PROJECT_KEY: 'your-project-key'
+  SONARQUBE_PROJECT_NAME: 'Your Project Name'
   SONARQUBE_LOGIN: $(SONARQUBE_TOKEN) # Set this as a secret variable in Azure DevOps
-  POSTGRES_PASSWORD: 'sonar' # Update if you have a different password
-  SONARQUBE_IMAGE: 'sonarqube:community'
+
+  # Docker images
   POSTGRES_IMAGE: 'postgres:13'
+  SONARQUBE_IMAGE: 'sonarqube:community'
   
+  # Kubernetes settings
+  K8S_NAMESPACE: 'sonarqube'
+
+  # Paths for reports
+  OWASP_OUTPUT_PATH: 'dependency-check-report.html'
+  TRIVY_OUTPUT_PATH: 'trivy-report.html'
+
 jobs:
-- job: 'DeployAndAnalyze'
-  displayName: 'Deploy SonarQube, Run Analysis, and Fetch Logs'
+- job: 'DeployAndScan'
+  displayName: 'Deploy SonarQube, Run Scans, and Analyze'
 
   steps:
   - checkout: self
 
-  # Deploy PostgreSQL and SonarQube
+  # Step 1: Deploy PostgreSQL and SonarQube on AKS using Helm
   - script: |
-      echo "Deploying PostgreSQL container..."
-      docker run -d --name sonarqube-postgres \
-        -e POSTGRES_USER=sonar \
-        -e POSTGRES_PASSWORD=$(POSTGRES_PASSWORD) \
-        -e POSTGRES_DB=sonarqube \
-        postgres:13
+      echo "Creating Kubernetes namespace..."
+      kubectl create namespace $(K8S_NAMESPACE) || true
 
-      echo "Deploying SonarQube container..."
-      docker run -d --name sonarqube \
-        -p 9000:9000 \
-        --link sonarqube-postgres:postgres \
-        -e SONARQUBE_JDBC_URL=jdbc:postgresql://postgres:5432/sonarqube \
-        -e SONARQUBE_JDBC_USERNAME=sonar \
-        -e SONARQUBE_JDBC_PASSWORD=$(POSTGRES_PASSWORD) \
-        $(SONARQUBE_IMAGE)
-    displayName: 'Deploy PostgreSQL and SonarQube Containers'
+      echo "Deploying PostgreSQL..."
+      helm repo add bitnami https://charts.bitnami.com/bitnami
+      helm install sonarqube-postgresql bitnami/postgresql \
+        --namespace $(K8S_NAMESPACE) \
+        --set postgresqlUsername=sonar \
+        --set postgresqlPassword=sonarpassword \
+        --set postgresqlDatabase=sonarqube
 
-  # Wait for SonarQube to be Ready
+      echo "Deploying SonarQube..."
+      helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
+      helm install sonarqube sonarqube/sonarqube \
+        --namespace $(K8S_NAMESPACE) \
+        --set postgresql.enabled=false \
+        --set jdbcUrl=jdbc:postgresql://sonarqube-postgresql.$(K8S_NAMESPACE).svc.cluster.local:5432/sonarqube \
+        --set jdbcUsername=sonar \
+        --set jdbcPassword=sonarpassword \
+        --set service.type=LoadBalancer
+    displayName: 'Deploy PostgreSQL and SonarQube on AKS'
+
+  # Step 2: Wait for SonarQube to be Ready
   - script: |
       echo "Waiting for SonarQube to be ready..."
-      until curl -s $(SONARQUBE_HOST_URL)/api/system/status | grep "status.*UP"; do
-        echo "SonarQube is not ready yet. Waiting..."
+      kubectl rollout status deployment sonarqube-sonarqube -n $(K8S_NAMESPACE)
+      until curl -s $(SONARQUBE_HOST_URL)/api/system/status | grep "UP"; do
+        echo "Waiting for SonarQube to be up and running..."
+        sleep 30
       done
-      echo "SonarQube is up and running."
     displayName: 'Wait for SonarQube Deployment'
 
-  # Run SonarQube Scanner
+  # Step 3: Run Trivy scan on Docker image
+  - script: |
+      echo "Running Trivy vulnerability scan..."
+      docker pull $(SONARQUBE_IMAGE)
+      trivy image --format html --output $(TRIVY_OUTPUT_PATH) $(SONARQUBE_IMAGE)
+    displayName: 'Run Trivy Vulnerability Scan'
+
+  # Step 4: Run OWASP Dependency-Check
+  - script: |
+      echo "Running OWASP Dependency-Check..."
+      docker run --rm \
+        -v $(System.DefaultWorkingDirectory):/src \
+        -v $(System.DefaultWorkingDirectory)/odc:/report \
+        owasp/dependency-check \
+        --project "My Project" \
+        --scan /src \
+        --format HTML \
+        --out /report/$(OWASP_OUTPUT_PATH)
+    displayName: 'Run OWASP Dependency-Check'
+
+  # Step 5: Run SonarQube Scanner
   - script: |
       echo "Running SonarQube Scanner..."
       docker run --rm \
@@ -61,9 +96,22 @@ jobs:
         -Dsonar.sources=/src
     displayName: 'Run SonarQube Analysis'
 
-  # Fetch SonarQube Logs
+  # Step 6: Fetch SonarQube logs
   - script: |
       echo "Fetching SonarQube logs..."
-      docker logs sonarqube > sonarqube-logs.txt
+      kubectl logs -l app.kubernetes.io/name=sonarqube -n $(K8S_NAMESPACE) > sonarqube-logs.txt
       cat sonarqube-logs.txt
     displayName: 'Show SonarQube Logs'
+
+  # Step 7: Publish Reports
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(System.DefaultWorkingDirectory)/trivy-report.html'
+      ArtifactName: 'Trivy Report'
+    displayName: 'Publish Trivy Report'
+
+  - task: PublishBuildArtifacts@1
+    inputs:
+      PathtoPublish: '$(System.DefaultWorkingDirectory)/odc/$(OWASP_OUTPUT_PATH)'
+      ArtifactName: 'OWASP Dependency-Check Report'
+    displayName: 'Publish OWASP Dependency-Check Report'
