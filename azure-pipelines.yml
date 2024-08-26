@@ -2,116 +2,41 @@ trigger:
 - main
 
 pool:
-  vmImage: 'ubuntu-latest'
-
-variables:
-  # SonarQube settings
-  SONARQUBE_HOST_URL: 'http://sonarqube.default.svc.cluster.local:9000'
-  SONARQUBE_PROJECT_KEY: 'your-project-key'
-  SONARQUBE_PROJECT_NAME: 'Your Project Name'
-  SONARQUBE_LOGIN: $(SONARQUBE_TOKEN) # Set this as a secret variable in Azure DevOps
-
-  # Docker images
-  POSTGRES_IMAGE: 'postgres:13'
-  SONARQUBE_IMAGE: 'sonarqube:community'
-  
-  # Kubernetes settings
-  K8S_NAMESPACE: 'sonarqube'
-
-  # Paths for reports
-  OWASP_OUTPUT_PATH: 'dependency-check-report.html'
-  TRIVY_OUTPUT_PATH: 'trivy-report.html'
+  vmImage: ubuntu-latest
 
 jobs:
-- job: 'DeployAndScan'
-  displayName: 'Deploy SonarQube, Run Scans, and Analyze'
-
+- job: SonarQubeAnalysis
   steps:
-  - checkout: self
-
-  # Step 1: Deploy PostgreSQL and SonarQube on AKS using Helm
-  - script: |
-      echo "Creating Kubernetes namespace..."
-      kubectl create namespace $(K8S_NAMESPACE) || true
-
-      echo "Deploying PostgreSQL..."
-      helm repo add bitnami https://charts.bitnami.com/bitnami
-      helm install sonarqube-postgresql bitnami/postgresql \
-        --namespace $(K8S_NAMESPACE) \
-        --set postgresqlUsername=sonar \
-        --set postgresqlPassword=sonarpassword \
-        --set postgresqlDatabase=sonarqube
-
-      echo "Deploying SonarQube..."
-      helm repo add sonarqube https://SonarSource.github.io/helm-chart-sonarqube
-      helm install sonarqube sonarqube/sonarqube \
-        --namespace $(K8S_NAMESPACE) \
-        --set postgresql.enabled=false \
-        --set jdbcUrl=jdbc:postgresql://sonarqube-postgresql.$(K8S_NAMESPACE).svc.cluster.local:5432/sonarqube \
-        --set jdbcUsername=sonar \
-        --set jdbcPassword=sonarpassword \
-        --set service.type=LoadBalancer
-    displayName: 'Deploy PostgreSQL and SonarQube on AKS'
-
-  # Step 2: Wait for SonarQube to be Ready
-  - script: |
-      echo "Waiting for SonarQube to be ready..."
-      kubectl rollout status deployment sonarqube-sonarqube -n $(K8S_NAMESPACE)
-      until curl -s $(SONARQUBE_HOST_URL)/api/system/status | grep "UP"; do
-        echo "Waiting for SonarQube to be up and running..."
-        sleep 30
-      done
-    displayName: 'Wait for SonarQube Deployment'
-
-  # Step 3: Run Trivy scan on Docker image
-  - script: |
-      echo "Running Trivy vulnerability scan..."
-      docker pull $(SONARQUBE_IMAGE)
-      trivy image --format html --output $(TRIVY_OUTPUT_PATH) $(SONARQUBE_IMAGE)
-    displayName: 'Run Trivy Vulnerability Scan'
-
-  # Step 4: Run OWASP Dependency-Check
-  - script: |
-      echo "Running OWASP Dependency-Check..."
-      docker run --rm \
-        -v $(System.DefaultWorkingDirectory):/src \
-        -v $(System.DefaultWorkingDirectory)/odc:/report \
-        owasp/dependency-check \
-        --project "My Project" \
-        --scan /src \
-        --format HTML \
-        --out /report/$(OWASP_OUTPUT_PATH)
-    displayName: 'Run OWASP Dependency-Check'
-
-  # Step 5: Run SonarQube Scanner
-  - script: |
-      echo "Running SonarQube Scanner..."
-      docker run --rm \
-        -e SONAR_HOST_URL=$(SONARQUBE_HOST_URL) \
-        -e SONAR_LOGIN=$(SONARQUBE_LOGIN) \
-        -v $(System.DefaultWorkingDirectory):/src \
-        sonarsource/sonar-scanner-cli \
-        -Dsonar.projectKey=$(SONARQUBE_PROJECT_KEY) \
-        -Dsonar.projectName=$(SONARQUBE_PROJECT_NAME) \
-        -Dsonar.sources=/src
-    displayName: 'Run SonarQube Analysis'
-
-  # Step 6: Fetch SonarQube logs
-  - script: |
-      echo "Fetching SonarQube logs..."
-      kubectl logs -l app.kubernetes.io/name=sonarqube -n $(K8S_NAMESPACE) > sonarqube-logs.txt
-      cat sonarqube-logs.txt
-    displayName: 'Show SonarQube Logs'
-
-  # Step 7: Publish Reports
-  - task: PublishBuildArtifacts@1
+  - task: UsePythonVersion@0
     inputs:
-      PathtoPublish: '$(System.DefaultWorkingDirectory)/trivy-report.html'
-      ArtifactName: 'Trivy Report'
-    displayName: 'Publish Trivy Report'
+      versionSpec: '3.x'
+      addToPath: true
 
-  - task: PublishBuildArtifacts@1
+  - script: |
+      # Install SonarQube Scanner
+      curl -o sonarqube-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.7.0.2747-linux.zip
+      unzip sonarqube-scanner-cli-4.7.0.2747-linux.zip
+      export PATH=$PATH:$(pwd)/sonar-scanner-4.7.0.2747-linux/bin
+    displayName: 'Install SonarQube Scanner'
+
+  - task: SonarQubePrepare@6
     inputs:
-      PathtoPublish: '$(System.DefaultWorkingDirectory)/odc/$(OWASP_OUTPUT_PATH)'
-      ArtifactName: 'OWASP Dependency-Check Report'
-    displayName: 'Publish OWASP Dependency-Check Report'
+      SonarQube: 'SonarQube'
+      scannerMode: 'CLI'
+      configMode: 'manual'
+      cliProjectKey: 'Infra-Test_Infra-Test_925dc69a-6aa8-40cd-8ff4-4b5b537f42f9'
+      cliSources: '.'
+
+  - script: |
+      # Install dependencies and build Python project
+      python -m pip install -r requirements.txt
+      python setup.py build
+    displayName: 'Build Python Project'
+
+  - task: SonarQubeAnalyze@6
+    inputs:
+      jdkversion: 'JAVA_HOME_17_X64'
+
+  - task: SonarQubePublish@6
+    inputs:
+      pollingTimeoutSec: '300'
